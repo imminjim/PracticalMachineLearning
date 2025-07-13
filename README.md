@@ -1,224 +1,220 @@
-# Predict activity quality from activity monitors
+---
+title: "Activity Classification using Wearable Sensors"
+author: "Lee Jung Min"
+date: "13. July 2025"
+output:
+  html_document:
+    keep_md: yes
+---
 
 ##Synopsis
 
-Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: 
+http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har
+ (see the section on the Weight Lifting Exercise Dataset).
 
-The goal of this project is to predict the manner in which they did the exercise. This is the `classe` variable in the training set.
+## Data
 
-## Data description
+The training data for this project are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
 
-The outcome variable is `classe`, a factor variable with 5 levels. For this data set, participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in 5 different fashions:
+The test data are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
 
-- exactly according to the specification (Class A)
-- throwing the elbows to the front (Class B)
-- lifting the dumbbell only halfway (Class C)
-- lowering the dumbbell only halfway (Class D)
-- throwing the hips to the front (Class E)
-
-## Initial configuration
-
-The initial configuration consists of loading some required packages and initializing some variables.
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
 
 
-```r
-#Data variables
-training.file   <- './data/pml-training.csv'
-test.cases.file <- './data/pml-testing.csv'
-training.url    <- 'http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'
-test.cases.url  <- 'http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
+## data, libraries
 
-#Directories
-if (!file.exists("data")){
-  dir.create("data")
-}
-if (!file.exists("data/submission")){
-  dir.create("data/submission")
-}
+Loading data and library
 
-#R-Packages
-IscaretInstalled <- require("caret")
+
+``` r
+library(lattice)
+library(ggplot2)
+library(caret)
+library(kernlab)
 ```
 
 ```
-## Loading required package: caret
-## Loading required package: lattice
-## Loading required package: ggplot2
-```
-
-```r
-if(!IscaretInstalled){
-    install.packages("caret")
-    library("caret")
-    }
-
-IsrandomForestInstalled <- require("randomForest")
+## 
+## Attaching package: 'kernlab'
 ```
 
 ```
-## Loading required package: randomForest
-## randomForest 4.6-10
+## The following object is masked from 'package:ggplot2':
+## 
+##     alpha
+```
+
+``` r
+library(rattle)
+```
+
+```
+## Loading required package: tibble
+```
+
+```
+## Loading required package: bitops
+```
+
+```
+## Rattle: A free graphical interface for data science with R.
+## Version 5.5.1 Copyright (c) 2006-2021 Togaware Pty Ltd.
+## Type 'rattle()' to shake, rattle, and roll your data.
+```
+
+``` r
+library(corrplot)
+```
+
+```
+## corrplot 0.95 loaded
+```
+
+``` r
+library(randomForest)
+```
+
+```
+## randomForest 4.7-1.2
+```
+
+```
 ## Type rfNews() to see new features/changes/bug fixes.
 ```
 
-```r
-if(!IsrandomForestInstalled){
-    install.packages("randomForest")
-    library("randomForest")
-    }
-
-IsRpartInstalled <- require("rpart")
+```
+## 
+## Attaching package: 'randomForest'
 ```
 
 ```
-## Loading required package: rpart
-```
-
-```r
-if(!IsRpartInstalled){
-    install.packages("rpart")
-    library("rpart")
-    }
-
-IsRpartPlotInstalled <- require("rpart.plot")
+## The following object is masked from 'package:rattle':
+## 
+##     importance
 ```
 
 ```
-## Loading required package: rpart.plot
+## The following object is masked from 'package:ggplot2':
+## 
+##     margin
 ```
 
-```r
-if(!IsRpartPlotInstalled){
-    install.packages("rpart.plot")
-    library("rpart.plot")
-    }
+``` r
+set.seed(1234)
 
-# Set seed for reproducability
-set.seed(9999)
+download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", "pml-training.csv")
+download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", "pml-testing.csv")
+
+traincsv <- read.csv("pml-training.csv")
+testcsv <- read.csv("pml-testing.csv")
+
+dim(traincsv)
+## [1] 19622   160
+dim(testcsv)
+## [1]  20 160
 ```
 
-## Data processing
-In this section the data is downloaded and processed. Some basic transformations and cleanup will be performed, so that `NA` values are omitted. Irrelevant columns such as `user_name`, `raw_timestamp_part_1`, `raw_timestamp_part_2`, `cvtd_timestamp`, `new_window`, and  `num_window` (columns 1 to 7) will be removed in the subset.
+The training dataset contains 160 variables and 19,622 observations, while the test dataset also includes 160 variables but only 20 observations.
 
-The `pml-training.csv` data is used to devise training and testing sets.
-The `pml-test.csv` data is used to predict and answer the 20 questions based on the trained model.
+## Data processing(cleaning)
+Remove Unnecessary variables from N/A variables.
+1~7 colomn removing
 
 
-```r
-# Download data
-download.file(training.url, training.file)
-download.file(test.cases.url,test.cases.file )
+``` r
+traincsv <- traincsv[,colMeans(is.na(traincsv)) < .95] #removing na
+traincsv <- traincsv[,-c(1:7)] #removing metadata
+```
 
-# Clean data
-training   <-read.csv(training.file, na.strings=c("NA","#DIV/0!", ""))
-testing <-read.csv(test.cases.file , na.strings=c("NA", "#DIV/0!", ""))
-training<-training[,colSums(is.na(training)) == 0]
-testing <-testing[,colSums(is.na(testing)) == 0]
+Removing near zero variance variables.
 
-# Subset data
-training   <-training[,-c(1:7)]
-testing <-testing[,-c(1:7)]
+
+``` r
+nvz <- nearZeroVar(traincsv)
+traincsv <- traincsv[,-nvz]
+dim(traincsv)
+```
+
+```
+## [1] 19622    53
 ```
 
 ## Cross-validation
-In this section cross-validation will be performed by splitting the training data in training (75%) and testing (25%) data.
+ training (80%) and testing (20%) data.
 
 
-```r
-subSamples <- createDataPartition(y=training$classe, p=0.75, list=FALSE)
-subTraining <- training[subSamples, ] 
-subTesting <- training[-subSamples, ]
+``` r
+Samples <- createDataPartition(y=traincsv$classe, p=0.80, list=FALSE)
+Training <- traincsv[Samples, ] 
+Testing <- traincsv[-Samples, ]
 ```
-
-## Expected out-of-sample error
-The expected out-of-sample error will correspond to the quantity: 1-accuracy in the cross-validation data. Accuracy is the proportion of correct classified observation over the total sample in the subTesting data set. Expected accuracy is the expected accuracy in the out-of-sample data set (i.e. original testing data set). Thus, the expected value of the out-of-sample error will correspond to the expected number of missclassified observations/total observations in the Test data set, which is the quantity: 1-accuracy found from the cross-validation data set.
-
-## Exploratory analysis
-The variable `classe` contains 5 levels. The plot of the outcome variable shows the frequency of each levels in the subTraining data.
-
-
-```r
-plot(subTraining$classe, col="orange", main="Levels of the variable classe", xlab="classe levels", ylab="Frequency")
-```
-
-![](Practical_ML_Course_Project_files/figure-html/exploranalysis-1.png) 
-
-The plot above shows that Level A is the most frequent classe. D appears to be the least frequent one.
 
 ## Prediction models
-In this section a decision tree and random forest will be applied to the data.
+Decision Trees, Random Forest, Gradient Boosted Trees, and SVM.
+Set up control to use 3-fold cross validation.
 
-### Decision tree
 
-```r
-# Fit model
-modFitDT <- rpart(classe ~ ., data=subTraining, method="class")
-
-# Perform prediction
-predictDT <- predict(modFitDT, subTesting, type = "class")
-
-# Plot result
-rpart.plot(modFitDT, main="Classification Tree", extra=102, under=TRUE, faclen=0)
+``` r
+control <- trainControl(method="cv", number=3, verboseIter=F)
 ```
 
-![](Practical_ML_Course_Project_files/figure-html/decisiontree-1.png) 
-
-Following confusion matrix shows the errors of the prediction algorithm.
+### Decision Tree
 
 
-```r
-confusionMatrix(predictDT, subTesting$classe)
+``` r
+mod_trees <- train(classe~., data=Training, method="rpart", trControl = control, tuneLength = 5)
+fancyRpartPlot(mod_trees$finalModel)
 ```
+
+![](Practical_ML_Course_Project_files/figure-html/unnamed-chunk-5-1.png)<!-- -->
+
+Prediction:
+
 
 ```
 ## Confusion Matrix and Statistics
 ## 
 ##           Reference
 ## Prediction    A    B    C    D    E
-##          A 1266  208   25   91   29
-##          B   33  535   71   30   67
-##          C   28   90  676  130   94
-##          D   45   72   59  501   43
-##          E   23   44   24   52  668
+##          A 1023  313  309  301  103
+##          B   16  246   25    7   77
+##          C   58   83  301   85  101
+##          D   19  117   49  250  124
+##          E    0    0    0    0  316
 ## 
 ## Overall Statistics
-##                                          
-##                Accuracy : 0.7435         
-##                  95% CI : (0.731, 0.7557)
-##     No Information Rate : 0.2845         
-##     P-Value [Acc > NIR] : < 2.2e-16      
-##                                          
-##                   Kappa : 0.6738         
-##  Mcnemar's Test P-Value : < 2.2e-16      
+##                                           
+##                Accuracy : 0.5445          
+##                  95% CI : (0.5287, 0.5602)
+##     No Information Rate : 0.2845          
+##     P-Value [Acc > NIR] : < 2.2e-16       
+##                                           
+##                   Kappa : 0.4061          
+##                                           
+##  Mcnemar's Test P-Value : < 2.2e-16       
 ## 
 ## Statistics by Class:
 ## 
 ##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            0.9075   0.5638   0.7906   0.6231   0.7414
-## Specificity            0.8994   0.9492   0.9155   0.9466   0.9643
-## Pos Pred Value         0.7820   0.7269   0.6640   0.6958   0.8237
-## Neg Pred Value         0.9607   0.9007   0.9539   0.9276   0.9431
-## Prevalence             0.2845   0.1935   0.1743   0.1639   0.1837
-## Detection Rate         0.2582   0.1091   0.1378   0.1022   0.1362
-## Detection Prevalence   0.3301   0.1501   0.2076   0.1468   0.1654
-## Balanced Accuracy      0.9035   0.7565   0.8531   0.7849   0.8528
+## Sensitivity            0.9167  0.32411  0.44006  0.38880  0.43828
+## Specificity            0.6345  0.96049  0.89904  0.90579  1.00000
+## Pos Pred Value         0.4993  0.66307  0.47930  0.44723  1.00000
+## Neg Pred Value         0.9504  0.85557  0.88376  0.88317  0.88772
+## Prevalence             0.2845  0.19347  0.17436  0.16391  0.18379
+## Detection Rate         0.2608  0.06271  0.07673  0.06373  0.08055
+## Detection Prevalence   0.5223  0.09457  0.16008  0.14249  0.08055
+## Balanced Accuracy      0.7756  0.64230  0.66955  0.64730  0.71914
 ```
 
 ### Random forest
 
-```r
-# Fit model
-modFitRF <- randomForest(classe ~ ., data=subTraining, method="class")
+``` r
+mod_rf <- train(classe~., data=Training, method="rf", trControl = control, tuneLength = 5)
 
-# Perform prediction
-predictRF <- predict(modFitRF, subTesting, type = "class")
-```
-
-Following confusion matrix shows the errors of the prediction algorithm.
-
-
-```r
-confusionMatrix(predictRF, subTesting$classe)
+pred_rf <- predict(mod_rf, Testing)
+cmrf <- confusionMatrix(pred_rf, factor(Testing$classe))
+cmrf
 ```
 
 ```
@@ -226,69 +222,65 @@ confusionMatrix(predictRF, subTesting$classe)
 ## 
 ##           Reference
 ## Prediction    A    B    C    D    E
-##          A 1394    2    0    0    0
-##          B    1  946    8    0    0
-##          C    0    1  846    6    0
-##          D    0    0    1  796    1
-##          E    0    0    0    2  900
+##          A 1116    5    0    0    0
+##          B    0  753    4    0    0
+##          C    0    1  680   10    2
+##          D    0    0    0  632    3
+##          E    0    0    0    1  716
 ## 
 ## Overall Statistics
 ##                                           
-##                Accuracy : 0.9955          
-##                  95% CI : (0.9932, 0.9972)
+##                Accuracy : 0.9934          
+##                  95% CI : (0.9903, 0.9957)
 ##     No Information Rate : 0.2845          
 ##     P-Value [Acc > NIR] : < 2.2e-16       
 ##                                           
-##                   Kappa : 0.9943          
+##                   Kappa : 0.9916          
+##                                           
 ##  Mcnemar's Test P-Value : NA              
 ## 
 ## Statistics by Class:
 ## 
 ##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            0.9993   0.9968   0.9895   0.9900   0.9989
-## Specificity            0.9994   0.9977   0.9983   0.9995   0.9995
-## Pos Pred Value         0.9986   0.9906   0.9918   0.9975   0.9978
-## Neg Pred Value         0.9997   0.9992   0.9978   0.9981   0.9998
-## Prevalence             0.2845   0.1935   0.1743   0.1639   0.1837
-## Detection Rate         0.2843   0.1929   0.1725   0.1623   0.1835
-## Detection Prevalence   0.2847   0.1947   0.1739   0.1627   0.1839
-## Balanced Accuracy      0.9994   0.9973   0.9939   0.9948   0.9992
+## Sensitivity            1.0000   0.9921   0.9942   0.9829   0.9931
+## Specificity            0.9982   0.9987   0.9960   0.9991   0.9997
+## Pos Pred Value         0.9955   0.9947   0.9812   0.9953   0.9986
+## Neg Pred Value         1.0000   0.9981   0.9988   0.9967   0.9984
+## Prevalence             0.2845   0.1935   0.1744   0.1639   0.1838
+## Detection Rate         0.2845   0.1919   0.1733   0.1611   0.1825
+## Detection Prevalence   0.2858   0.1930   0.1767   0.1619   0.1828
+## Balanced Accuracy      0.9991   0.9954   0.9951   0.9910   0.9964
 ```
 
 ## Conclusion
 
 ### Result
-
-The confusion matrices show, that the Random Forest algorithm performens better than decision trees. The accuracy for the Random Forest model was 0.995 (95% CI: (0.993, 0.997)) compared to 0.739 (95% CI: (0.727, 0.752)) for Decision Tree model. The random Forest model is choosen.
-
+```
+##      accuracy oos_error
+## Tree    0.5445    0.4555
+## Random  0.9941    0.0059
+```
 ### Expected out-of-sample error
-The expected out-of-sample error is estimated at 0.005, or 0.5%. The expected out-of-sample error is calculated as 1 - accuracy for predictions made against the cross-validation set. Our Test data set comprises 20 cases. With an accuracy above 99% on our cross-validation data, we can expect that very few, or none, of the test samples will be missclassified.
 
-## Submission
-In this section the files for the project submission are generated using the random forest algorithm on the testing data.
+The confusion matrices show, that the Random Forest algorithm performens better than decision trees. The accuracy for the Random Forest model was 0.9941 (95% CI: (0.9912, 0.9963)) compared to 0.5445 (95% CI: (0.5287, 0.5602)) for Decision Tree model. The random Forest model is better.
 
+## Test set prediction
 
-```r
-# Perform prediction
-predictSubmission <- predict(modFitRF, testing, type="class")
-predictSubmission
+``` r
+pred <- predict(mod_rf, testcsv)
+print(pred)
 ```
 
 ```
-##  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 
-##  B  A  B  A  A  E  D  B  A  A  B  C  B  A  E  E  A  B  B  B 
+##  [1] B A B A A E D B A A B C B A E E A B B B
 ## Levels: A B C D E
 ```
+## plot
 
-```r
-# Write files for submission
-pml_write_files = function(x){
-  n = length(x)
-  for(i in 1:n){
-    filename = paste0("./data/submission/problem_id_",i,".txt")
-    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
-  }
-}
-
-pml_write_files(predictSubmission)
+``` r
+plot(mod_trees)
 ```
+
+![](Practical_ML_Course_Project_files/figure-html/unnamed-chunk-6-1.png)<!-- -->
+
+Initially, the decision tree model showed an accuracy of about 54.45%, which improved significantly to 99.41% with the random forest model. Based on this increase, we expect the out-of-sample error to be very low—approximately 0.6%—indicating that the random forest model generalizes well to unseen data with minimal misclassification.
