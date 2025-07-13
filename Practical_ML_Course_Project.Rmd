@@ -1,0 +1,135 @@
+---
+title: "Activity Classification using Wearable Sensors"
+author: "Lee Jung Min"
+date: "13. July 2025"
+output:
+  html_document:
+    keep_md: yes
+---
+
+##Synopsis
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: 
+http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har
+ (see the section on the Weight Lifting Exercise Dataset).
+
+## Data
+
+The training data for this project are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+
+## data, libraries
+
+Loading data and library
+
+```{r configuration, echo=TRUE, results='hide'}
+
+library(lattice)
+library(ggplot2)
+library(caret)
+library(kernlab)
+library(rattle)
+library(corrplot)
+library(randomForest)
+set.seed(1234)
+
+download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", "pml-training.csv")
+download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", "pml-testing.csv")
+
+traincsv <- read.csv("pml-training.csv")
+testcsv <- read.csv("pml-testing.csv")
+
+dim(traincsv)
+## [1] 19622   160
+dim(testcsv)
+## [1]  20 160
+
+```
+
+The training dataset contains 160 variables and 19,622 observations, while the test dataset also includes 160 variables but only 20 observations.
+
+## Data processing(cleaning)
+Remove Unnecessary variables from N/A variables.
+1~7 colomn removing
+
+```{r}
+traincsv <- traincsv[,colMeans(is.na(traincsv)) < .95] #removing na
+traincsv <- traincsv[,-c(1:7)] #removing metadata
+```
+
+Removing near zero variance variables.
+
+```{r}
+nvz <- nearZeroVar(traincsv)
+traincsv <- traincsv[,-nvz]
+dim(traincsv)
+```
+
+## Cross-validation
+ training (80%) and testing (20%) data.
+
+```{r}
+Samples <- createDataPartition(y=traincsv$classe, p=0.80, list=FALSE)
+Training <- traincsv[Samples, ] 
+Testing <- traincsv[-Samples, ]
+```
+
+## Prediction models
+Decision Trees, Random Forest, Gradient Boosted Trees, and SVM.
+Set up control to use 3-fold cross validation.
+
+```{r}
+control <- trainControl(method="cv", number=3, verboseIter=F)
+```
+
+### Decision Tree
+
+```{r, echo=TRUE}
+mod_trees <- train(classe~., data=Training, method="rpart", trControl = control, tuneLength = 5)
+fancyRpartPlot(mod_trees$finalModel)
+```
+
+Prediction:
+
+```{r tree-confusion, echo=FALSE}
+pred_trees <- predict(mod_trees, Testing)
+cmtrees <- confusionMatrix(pred_trees, factor(Testing$classe))
+cmtrees
+```
+
+### Random forest
+```{r randomforest, echo=TRUE}
+mod_rf <- train(classe~., data=Training, method="rf", trControl = control, tuneLength = 5)
+
+pred_rf <- predict(mod_rf, Testing)
+cmrf <- confusionMatrix(pred_rf, factor(Testing$classe))
+cmrf
+```
+
+## Conclusion
+
+### Result
+```
+##      accuracy oos_error
+## Tree    0.5445    0.4555
+## Random  0.9941    0.0059
+```
+### Expected out-of-sample error
+
+The confusion matrices show, that the Random Forest algorithm performens better than decision trees. The accuracy for the Random Forest model was 0.9941 (95% CI: (0.9912, 0.9963)) compared to 0.5445 (95% CI: (0.5287, 0.5602)) for Decision Tree model. The random Forest model is better.
+
+## Test set prediction
+```{r submission, echo=TRUE}
+pred <- predict(mod_rf, testcsv)
+print(pred)
+```
+## plot
+```{r, echo=TRUE}
+plot(mod_trees)
+```
+
+Initially, the decision tree model showed an accuracy of about 54.45%, which improved significantly to 99.41% with the random forest model. Based on this increase, we expect the out-of-sample error to be very low—approximately 0.6%—indicating that the random forest model generalizes well to unseen data with minimal misclassification.
